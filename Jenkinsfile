@@ -6,34 +6,64 @@ pipeline {
   }
 
   stages {
-    stage('Clone') {
+    stage('Verify Environment') {
       steps {
-        git branch: 'main', url: 'https://github.com/MedAmine02/tp2_jenkins_pipeline_angular'
+        bat '''
+          echo === VERIFYING JENKINS ENVIRONMENT ===
+          echo Node.js version:
+          node --version || echo "ERROR: Node.js not found!"
+          echo
+          echo npm version:
+          npm --version || echo "ERROR: npm not found!"
+          echo
+          echo Current directory:
+          echo %CD%
+          echo
+          echo Checking for package.json:
+          if exist package.json (echo "✅ Found package.json") else (echo "❌ No package.json!")
+        '''
       }
     }
 
-    stage('Install') {
+    stage('Clean & Install') {
       steps {
         bat '''
-          REM Clean installation
-          rmdir /s /q node_modules 2>nul
-          npm install
+          echo === CLEANING & INSTALLING ===
+          echo Removing old dependencies...
+          rmdir /s /q node_modules 2>nul || echo "No node_modules to remove"
+          del package-lock.json 2>nul || echo "No package-lock.json"
+          
+          echo Cleaning npm cache...
+          npm cache clean --force
+          
+          echo Installing fresh dependencies...
+          npm ci
+          
+          echo Verifying Angular CLI installation...
+          if exist node_modules\\@angular\\cli (
+            echo "✅ Angular CLI installed in node_modules"
+          ) else (
+            echo "❌ Angular CLI missing!"
+            exit 1
+          )
         '''
       }
     }
     
-    stage('Test') {
+    stage('Run Tests - Using npm run') {
       steps {
         bat '''
-          REM Use the ng command from package.json scripts
-          npm test -- --watch=false --browsers=ChromeHeadless
+          echo === RUNNING TESTS ===
+          echo Using npm run test (NOT npx)...
+          npm run test -- --watch=false --browsers=ChromeHeadless --no-progress
         '''
       }
     }
     
-    stage('Build') {
+    stage('Build Project') {
       steps {
         bat '''
+          echo === BUILDING ===
           npm run build
         '''
       }
@@ -42,7 +72,7 @@ pipeline {
 
   post {
     success {
-      echo '✅ Success! Tests passed and build completed.'
+      echo '✅ Build successful! Tests passed.'
     }
     failure {
       echo '❌ Build or tests failed.'
