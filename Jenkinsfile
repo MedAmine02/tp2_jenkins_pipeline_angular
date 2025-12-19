@@ -12,79 +12,55 @@ pipeline {
       }
     }
 
-    stage('Verify and Install') {
+    stage('Install Dependencies - NO NXP') {
       steps {
         bat '''
-          echo ===== STEP 1: VERIFY PROJECT =====
-          echo Current directory: %CD%
-          if not exist package.json (
-            echo "ERROR: No package.json found!"
-            dir
+          echo ===== STEP 1: CLEAN EVERYTHING =====
+          echo Removing ALL previous installations...
+          rmdir /s /q node_modules 2>nul
+          del package-lock.json 2>nul
+          del ng.cmd 2>nul
+          
+          echo ===== STEP 2: INSTALL WITH VERBOSE LOGGING =====
+          echo Installing dependencies...
+          npm install --no-audit 2>&1 | findstr "angular"
+          
+          echo ===== STEP 3: VERIFY ANGULAR CLI IS INSTALLED =====
+          if exist node_modules\\@angular\\cli\\bin\\ng (
+            echo "✅ Angular CLI binary exists at: node_modules\\@angular\\cli\\bin\\ng"
+            echo Testing direct execution...
+            node node_modules\\@angular\\cli\\bin\\ng --version
+          ) else (
+            echo "❌ CRITICAL: Angular CLI binary NOT FOUND!"
+            echo Listing @angular folder contents:
+            dir node_modules\\@angular 2>nul || echo "No @angular folder!"
             exit 1
           )
-          
-          echo Checking package.json scripts...
-          type package.json | findstr "scripts"
-          
-          echo ===== STEP 2: CLEAN INSTALL =====
-          echo Removing old node_modules...
-          rmdir /s /q node_modules 2>nul || echo "No node_modules to remove"
-          
-          echo Installing dependencies...
-          npm install --no-audit --legacy-peer-deps
-          
-          echo ===== STEP 3: CREATE MANUAL NG COMMAND =====
-          echo Creating ng.cmd manually...
-          echo @echo off > node_modules\\.bin\\ng.cmd
-          echo "%~dp0\\node.exe" "%~dp0\\..\\@angular\\cli\\bin\\ng" %%* >> node_modules\\.bin\\ng.cmd
-          
-          echo ===== STEP 4: VERIFY NG COMMAND =====
-          echo Testing the ng command...
-          if exist node_modules\\.bin\\ng.cmd (
-            echo "✅ ng.cmd created successfully"
-            node_modules\\.bin\\ng.cmd version 2>&1 || echo "ng version command failed, but file exists"
-          ) else (
-            echo "❌ Failed to create ng.cmd"
-            echo "Creating it with alternative method..."
-            echo @IF EXIST "%%~dp0\\node.exe" ( "%%~dp0\\node.exe" "%%~dp0\\..\\@angular\\cli\\bin\\ng" %%* ) ELSE ( node "%%~dp0\\..\\@angular\\cli\\bin\\ng" %%* ) > node_modules\\.bin\\ng.cmd
-          )
         '''
       }
     }
     
-    stage('Run Tests - DIRECT EXECUTION') {
+    stage('Run Tests - DIRECT NODE EXECUTION') {
       steps {
         bat '''
-          echo ===== RUNNING TESTS =====
+          echo ===== RUNNING TESTS - NO NXP =====
+          echo NEVER using npx - using direct node execution instead...
           
-          echo Method 1: Direct Angular CLI execution...
+          REM Method 1: Direct Node.js execution of Angular CLI
+          echo "Executing: node node_modules\\@angular\\cli\\bin\\ng test --watch=false --browsers=ChromeHeadless --no-progress"
           node node_modules\\@angular\\cli\\bin\\ng test --watch=false --browsers=ChromeHeadless --no-progress
           
-          REM If Method 1 fails, try Method 2
-          if errorlevel 1 (
-            echo "Method 1 failed, trying npm test..."
-            npm test -- --watch=false --browsers=ChromeHeadless --no-progress
-          )
-          
-          REM If Method 2 fails, try Method 3
-          if errorlevel 1 (
-            echo "npm test failed, trying direct karma..."
-            node node_modules\\karma\\bin\\karma start karma.conf.js --single-run --browsers=ChromeHeadless
-          )
+          REM If Method 1 fails, the build stops here with clear error
         '''
       }
     }
     
-    stage('Build - DIRECT EXECUTION') {
+    stage('Build - DIRECT NODE EXECUTION') {
       steps {
         bat '''
-          echo ===== BUILDING =====
+          echo ===== BUILDING - NO NXP =====
+          echo "Executing: node node_modules\\@angular\\cli\\bin\\ng build"
           node node_modules\\@angular\\cli\\bin\\ng build --configuration production
-          
-          REM Alternative if above fails
-          if errorlevel 1 (
-            npm run build
-          )
         '''
       }
     }
